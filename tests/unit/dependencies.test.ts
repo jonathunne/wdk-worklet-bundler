@@ -12,7 +12,8 @@ import {
   checkOptionalPeerDependencies,
   findMissingRequiredPeers,
   findMissingOptionalPeers,
-  scanPeerDependencies
+  scanPeerDependencies,
+  collectInstalledPackages
 } from '../../src/validators/dependencies'
 
 describe('Dependency Validator', () => {
@@ -283,6 +284,136 @@ describe('Dependency Validator', () => {
       expect(deferred).toEqual([])
     })
 
+    it('should not defer an optional peer that is present nested under another package', () => {
+      // Real-world shape: @bitcoinerlab/descriptors-core (pulled by wdk-wallet-btc)
+      // declares @scure/btc-signer as an optional peer, while @buildonspark/spark-sdk
+      // (pulled by wdk-wallet-spark) genuinely depends on it — nested under spark-sdk
+      // because a version conflict prevents hoisting. Deferring it drops it from the
+      // bundle and fails at runtime with MODULE_NOT_FOUND.
+      const descriptorsPath = writeModule('@bitcoinerlab/descriptors-core', {
+        peerDependencies: { '@scure/btc-signer': '^1.5.0' },
+        peerDependenciesMeta: { '@scure/btc-signer': { optional: true } }
+      })
+      // Present nested: node_modules/@buildonspark/spark-sdk/node_modules/@scure/btc-signer
+      const sparkNested = path.join(
+        tempDir, 'node_modules', '@buildonspark', 'spark-sdk',
+        'node_modules', '@scure', 'btc-signer'
+      )
+      fs.mkdirSync(sparkNested, { recursive: true })
+      fs.writeFileSync(
+        path.join(sparkNested, 'package.json'),
+        JSON.stringify({ name: '@scure/btc-signer', version: '1.8.1' })
+      )
+
+      const deferred = findMissingOptionalPeers(
+        [{ name: '@bitcoinerlab/descriptors-core', path: descriptorsPath, version: '1.0.0', isLocal: false }],
+        tempDir
+      )
+
+      expect(deferred).toEqual([])
+    })
+
+    it('collectInstalledPackages finds hoisted, nested, and scoped-nested packages', () => {
+      writeModule('hoisted-pkg', {})
+      const scopedNested = path.join(
+        tempDir, 'node_modules', '@buildonspark', 'spark-sdk',
+        'node_modules', '@scure', 'btc-signer'
+      )
+      fs.mkdirSync(scopedNested, { recursive: true })
+      fs.writeFileSync(path.join(scopedNested, 'package.json'), JSON.stringify({ name: '@scure/btc-signer', version: '1.8.1' }))
+      fs.writeFileSync(
+        path.join(tempDir, 'node_modules', '@buildonspark', 'spark-sdk', 'package.json'),
+        JSON.stringify({ name: '@buildonspark/spark-sdk', version: '1.0.0' })
+      )
+
+      const installed = collectInstalledPackages(tempDir)
+
+      expect(installed.has('hoisted-pkg')).toBe(true)
+      expect(installed.has('@buildonspark/spark-sdk')).toBe(true)
+      expect(installed.has('@scure/btc-signer')).toBe(true)
+      expect(installed.has('@ledgerhq/ledger-bitcoin')).toBe(false)
+    })
+
+    it('collectInstalledPackages finds packages nested under a symlinked package', () => {
+      // Workspace layout: the linked package's own node_modules must be
+      // walked through the symlink.
+      const realWorkspacePkg = path.join(tempDir, 'packages', 'my-lib')
+      const innerNested = path.join(realWorkspacePkg, 'node_modules', 'inner-dep')
+      fs.mkdirSync(innerNested, { recursive: true })
+      fs.writeFileSync(path.join(realWorkspacePkg, 'package.json'), JSON.stringify({ name: 'my-lib', version: '1.0.0' }))
+      fs.writeFileSync(path.join(innerNested, 'package.json'), JSON.stringify({ name: 'inner-dep', version: '1.0.0' }))
+
+      fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true })
+      fs.symlinkSync(realWorkspacePkg, path.join(tempDir, 'node_modules', 'my-lib'), 'dir')
+
+      const installed = collectInstalledPackages(tempDir)
+
+      expect(installed.has('my-lib')).toBe(true)
+      expect(installed.has('inner-dep')).toBe(true)
+    })
+
+    it('collectInstalledPackages terminates on symlink cycles', () => {
+      // loop-pkg/node_modules points back at the root node_modules — without
+      // realpath-keyed visited tracking this would recurse forever.
+      const rootNm = path.join(tempDir, 'node_modules')
+      const loopPkg = path.join(rootNm, 'loop-pkg')
+      fs.mkdirSync(loopPkg, { recursive: true })
+      fs.writeFileSync(path.join(loopPkg, 'package.json'), JSON.stringify({ name: 'loop-pkg', version: '1.0.0' }))
+      fs.symlinkSync(rootNm, path.join(loopPkg, 'node_modules'), 'dir')
+      writeModule('other-pkg', {})
+
+      const installed = collectInstalledPackages(tempDir)
+
+      expect(installed.has('loop-pkg')).toBe(true)
+      expect(installed.has('other-pkg')).toBe(true)
+    })
+
+    it('should not defer an optional peer installed via symlink (npm link style)', () => {
+      // Real package directory outside node_modules, symlinked in — the
+      // layout npm link, file: directory deps, and pnpm produce.
+      // fs.existsSync follows symlinks, so the scanner must see it as installed.
+      const realDir = path.join(tempDir, 'checkouts', 'ledger-bitcoin')
+      fs.mkdirSync(realDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(realDir, 'package.json'),
+        JSON.stringify({ name: '@ledgerhq/ledger-bitcoin', version: '0.3.1' })
+      )
+      const scopeDir = path.join(tempDir, 'node_modules', '@ledgerhq')
+      fs.mkdirSync(scopeDir, { recursive: true })
+      fs.symlinkSync(realDir, path.join(scopeDir, 'ledger-bitcoin'), 'dir')
+
+      const descriptorsPath = writeModule('@bitcoinerlab/descriptors', {
+        peerDependencies: { '@ledgerhq/ledger-bitcoin': '^0.3.1' },
+        peerDependenciesMeta: { '@ledgerhq/ledger-bitcoin': { optional: true } }
+      })
+
+      expect(resolveModule('@ledgerhq/ledger-bitcoin', tempDir)?.version).toBe('0.3.1')
+      expect(findMissingOptionalPeers(
+        [{ name: '@bitcoinerlab/descriptors', path: descriptorsPath, version: '1.0.0', isLocal: false }],
+        tempDir
+      )).toEqual([])
+    })
+
+    it('should defer an optional peer whose symlink is dangling', () => {
+      // A symlink whose target was deleted: existsSync follows the link and
+      // returns false, so the package is effectively absent and must be
+      // deferred like any other missing optional peer.
+      const scopeDir = path.join(tempDir, 'node_modules', '@ledgerhq')
+      fs.mkdirSync(scopeDir, { recursive: true })
+      fs.symlinkSync(path.join(tempDir, 'deleted-target'), path.join(scopeDir, 'ledger-bitcoin'), 'dir')
+
+      const descriptorsPath = writeModule('@bitcoinerlab/descriptors', {
+        peerDependencies: { '@ledgerhq/ledger-bitcoin': '^0.3.1' },
+        peerDependenciesMeta: { '@ledgerhq/ledger-bitcoin': { optional: true } }
+      })
+
+      expect(resolveModule('@ledgerhq/ledger-bitcoin', tempDir)).toBeNull()
+      expect(findMissingOptionalPeers(
+        [{ name: '@bitcoinerlab/descriptors', path: descriptorsPath, version: '1.0.0', isLocal: false }],
+        tempDir
+      )).toEqual(['@ledgerhq/ledger-bitcoin'])
+    })
+
     it('should never defer a peer required elsewhere (required scanned first)', () => {
       const requirerPath = writeModule('pkg-requirer', {
         peerDependencies: { 'shared-peer': '^4.0.0' }
@@ -338,6 +469,28 @@ describe('Dependency Validator', () => {
 
     it('should keep checkOptionalPeerDependencies as alias of findMissingRequiredPeers', () => {
       expect(checkOptionalPeerDependencies).toBe(findMissingRequiredPeers)
+    })
+
+    it('skipOptional skips optional-peer bookkeeping without affecting missing', () => {
+      const modulePath = writeModule('@tetherto/wdk-wallet-btc', {
+        peerDependencies: {
+          'some-required-peer': '^1.0.0',
+          '@ledgerhq/ledger-bitcoin': '^0.3.1'
+        },
+        peerDependenciesMeta: { '@ledgerhq/ledger-bitcoin': { optional: true } }
+      })
+      const installedModules = [{ name: '@tetherto/wdk-wallet-btc', path: modulePath, version: '1.0.0', isLocal: false }]
+
+      const full = scanPeerDependencies(installedModules, tempDir)
+      const skipped = scanPeerDependencies(installedModules, tempDir, { skipOptional: true })
+
+      // .missing is identical either way — optional peers never contribute to it
+      expect(skipped.missing.map(m => m.name)).toEqual(full.missing.map(m => m.name))
+      expect(skipped.missing.map(m => m.name)).toEqual(['some-required-peer'])
+
+      // optional bookkeeping only happens on the full scan
+      expect(full.missingOptional).toEqual(['@ledgerhq/ledger-bitcoin'])
+      expect(skipped.missingOptional).toEqual([])
     })
 
     it('should skip ignored peer prefixes', () => {
