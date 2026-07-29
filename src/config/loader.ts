@@ -49,6 +49,21 @@ async function loadConfigFile (filepath: string): Promise<WdkBundleConfig> {
   return loaded.default ?? loaded
 }
 
+/**
+ * Whether the bundle gets the post-pack ESM→CJS conversion.
+ *
+ * Single source of truth shared by the bundler step and the entry
+ * generators, so the runtime `.mjs` loader patch emitted into the entry
+ * always matches what was actually done to the bundle.
+ *
+ * Opt-in and independent of transport and platform: enable it whenever any
+ * target engine's Bare port can't load ESM (JSC, QuickJS), leave it off for
+ * ESM-capable engines (V8).
+ */
+export function shouldConvertEsmToCjs (config: WdkBundleConfig): boolean {
+  return config.options?.convertEsmToCjs ?? false
+}
+
 export async function loadConfig (configPath?: string): Promise<ResolvedConfig> {
   const cwd = process.cwd()
 

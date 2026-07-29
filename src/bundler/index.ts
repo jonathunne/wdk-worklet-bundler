@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import { execFileSync } from 'child_process'
 import type { ResolvedConfig } from '../config/types'
+import { shouldConvertEsmToCjs } from '../config/loader'
 import { generateEntryPoint } from '../generators/entry'
 import { generateJsonRpcEntryPoint } from '../generators/entry-jsonrpc'
 import { linkAddons } from './addons'
@@ -295,9 +296,10 @@ export async function generateBundle (
       }
     }
 
-    // Step 4b: Convert ESM to CJS in bundle (needed for JSC runtimes like iOS/macOS)
-    const shouldConvertCjs = config.options?.convertEsmToCjs ?? isJsonRpc
-    if (shouldConvertCjs) {
+    // Step 4b: Convert ESM to CJS in bundle (for engines without ESM support
+    // in Bare, e.g. JSC and QuickJS). The entry generators emit the matching
+    // runtime .mjs loader patch based on the same flag.
+    if (shouldConvertEsmToCjs(config)) {
       if (verbose) log('  Converting ESM to CJS in bundle...')
       convertBundleEsmToCjs(config.resolvedOutput.bundle, { minify: true, verbose })
     }
