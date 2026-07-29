@@ -28,7 +28,7 @@ interface BundleHeader {
 function parseBundle (buf: Buffer): { header: BundleHeader, dataStart: number } {
   const nl = buf.indexOf(0x0a)
   const headerStart = nl + 1
-  const headerArea = buf.slice(headerStart, headerStart + parseInt(buf.slice(0, nl).toString(), 10) + 10).toString()
+  const headerArea = buf.subarray(headerStart, headerStart + parseInt(buf.subarray(0, nl).toString(), 10) + 10).toString()
 
   let depth = 0
   let jsonEnd = -1
@@ -39,7 +39,7 @@ function parseBundle (buf: Buffer): { header: BundleHeader, dataStart: number } 
   }
   if (jsonEnd < 0) throw new Error('Could not find JSON end in bundle header')
 
-  const header = JSON.parse(buf.slice(headerStart, headerStart + jsonEnd).toString()) as BundleHeader
+  const header = JSON.parse(buf.subarray(headerStart, headerStart + jsonEnd).toString()) as BundleHeader
   const dataStart = headerStart + jsonEnd + 1
   return { header, dataStart }
 }
@@ -68,7 +68,7 @@ export function convertBundleEsmToCjs (bundlePath: string, options: ConvertOptio
   let pkgPatched = 0
 
   for (const [filePath, info] of sortedEntries) {
-    const originalContent = buf.slice(dataStart + info.offset, dataStart + info.offset + info.length)
+    const originalContent = buf.subarray(dataStart + info.offset, dataStart + info.offset + info.length)
     let newContent = originalContent
 
     if (filePath.endsWith('.js') || filePath.endsWith('.mjs') || filePath.endsWith('.cjs')) {
@@ -76,6 +76,7 @@ export function convertBundleEsmToCjs (bundlePath: string, options: ConvertOptio
         const result = transformSync(originalContent.toString(), {
           format: 'cjs',
           target: 'es2020',
+          supported: { 'dynamic-import': false },
           minify,
           legalComments: minify ? 'none' : 'eof'
         })
