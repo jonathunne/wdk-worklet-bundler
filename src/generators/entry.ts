@@ -75,6 +75,7 @@ const context = {
   protocolManagers: typeof protocolManagers !== 'undefined' ? protocolManagers : {},
   moduleManagers: typeof moduleManagers !== 'undefined' ? moduleManagers : {},
   allowedMethods: ${JSON.stringify(config.allowedMethods ?? {})},
+  allowedModuleMethods: ${JSON.stringify(config.allowedModuleMethods ?? {})},
   wdkLoadError: null
 }
 

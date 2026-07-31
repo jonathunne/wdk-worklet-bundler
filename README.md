@@ -215,13 +215,27 @@ module.exports = {
   preloadModules: ["spark-frost-bare-addon"],
 
   // ── Allowed methods ───────────────────────────────────────
-  // Restrict which methods can be invoked per surface (network,
-  // protocol, or module key). A surface not listed here is left
-  // unrestricted; a surface listed with an array only allows those
-  // method names.
+  // Optional but recommended: without this, callMethod can invoke any
+  // method on the resolved account/protocol object, including
+  // fund-moving or key-export operations. Listing a network or
+  // protocol here restricts it to just the given methods; anything
+  // left out stays unrestricted, so you can lock this down one
+  // surface at a time.
   allowedMethods: {
-    ethereum: ["getAddress", "getBalance", "sendTransaction", "signMessage"],
-    aaveEvm: ["quoteSwap"],
+    ethereum: {
+      methods: ["getAddress", "getBalance", "sendTransaction", "signMessage"],
+      protocols: { lending: { aaveEvm: { methods: ["supply", "withdraw"] } } },
+    },
+  },
+
+  // ── Allowed module methods ────────────────────────────────
+  // Optional but recommended: without this, callModule can invoke any
+  // method on a bundled module instance (e.g. an address book). Keyed
+  // by module name; a module left out stays unrestricted. Only applies
+  // to the 'hrpc' transport — bundled modules aren't wired up for
+  // 'jsonrpc'.
+  allowedModuleMethods: {
+    addressBook: { methods: ["list", "add"] },
   },
 
   // ── Output paths ──────────────────────────────────────────

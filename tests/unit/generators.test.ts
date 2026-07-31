@@ -249,14 +249,16 @@ describe('Code Generators', () => {
     it('should wire allowedMethods into context when configured', async () => {
       const config = createMockConfig({
         allowedMethods: {
-          ethereum: ['getAddress', 'getBalance'],
-          uniswap: ['quoteSwap']
+          ethereum: {
+            methods: ['getAddress', 'getBalance'],
+            protocols: { swap: { uniswap: { methods: ['quoteSwap'] } } }
+          }
         }
       })
       const entryPath = await generateEntryPoint(config, tempDir)
       const content = fs.readFileSync(entryPath, 'utf-8')
 
-      expect(content).toContain('allowedMethods: {"ethereum":["getAddress","getBalance"],"uniswap":["quoteSwap"]}')
+      expect(content).toContain('allowedMethods: {"ethereum":{"methods":["getAddress","getBalance"],"protocols":{"swap":{"uniswap":{"methods":["quoteSwap"]}}}}}')
     })
 
     it('should default allowedMethods to an empty map when none configured', async () => {
@@ -265,6 +267,26 @@ describe('Code Generators', () => {
       const content = fs.readFileSync(entryPath, 'utf-8')
 
       expect(content).toContain('allowedMethods: {}')
+    })
+
+    it('should wire allowedModuleMethods into context when configured', async () => {
+      const config = createMockConfig({
+        allowedModuleMethods: {
+          addressBook: { methods: ['list', 'add'] }
+        }
+      })
+      const entryPath = await generateEntryPoint(config, tempDir)
+      const content = fs.readFileSync(entryPath, 'utf-8')
+
+      expect(content).toContain('allowedModuleMethods: {"addressBook":{"methods":["list","add"]}}')
+    })
+
+    it('should default allowedModuleMethods to an empty map when none configured', async () => {
+      const config = createMockConfig()
+      const entryPath = await generateEntryPoint(config, tempDir)
+      const content = fs.readFileSync(entryPath, 'utf-8')
+
+      expect(content).toContain('allowedModuleMethods: {}')
     })
 
     it('should create output directory if it does not exist', async () => {
