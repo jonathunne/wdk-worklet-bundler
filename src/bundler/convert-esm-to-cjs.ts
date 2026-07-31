@@ -28,6 +28,7 @@ interface FileInfo {
 
 interface BundleHeader {
   files: Record<string, FileInfo>
+  main?: string
 }
 
 function parseBundle (buf: Buffer): { header: BundleHeader, dataStart: number } {
@@ -81,6 +82,78 @@ function rewrapBundle (wrapper: BundleWrapper | null, bundle: Buffer): Buffer {
   if (wrapper === 'json') return Buffer.from(`${str}\n`)
   const prefix = WRAPPERS.find(w => w.kind === wrapper)!.prefix
   return Buffer.from(`${prefix}${str}\n`)
+}
+
+/**
+ * Validate a converted bundle on disk (wrapped or raw). Build-time guard run
+ * automatically after conversion so a malformed artifact fails the build
+ * instead of crashing on-device:
+ *  - wrapper unwraps and the bundle parses (catches dataStart off-by-ones)
+ *  - offsets == cumsum(lengths) and data length == sum(lengths)
+ *  - every JS file parses as CJS and no dynamic import() survives
+ *  - no package.json still declares "type": "module"
+ *  - header.main (when present) exists in the file map
+ * Throws with the full list of problems on failure.
+ */
+export function validateBundle (bundlePath: string): void {
+  const problems: string[] = []
+
+  const { bundle: buf } = unwrapBundle(fs.readFileSync(bundlePath))
+  const { header, dataStart } = parseBundle(buf)
+  if (!header.files) throw new Error(`Bundle validation failed for ${bundlePath}: no files map in header`)
+
+  if (header.main && header.files[header.main] === undefined) {
+    problems.push(`main '${header.main}' is not in the file map`)
+  }
+
+  const sortedEntries = Object.entries(header.files)
+    .filter(([, info]) => info.offset !== undefined)
+    .sort((a, b) => a[1].offset - b[1].offset)
+
+  let expectedOffset = 0
+  for (const [filePath, info] of sortedEntries) {
+    if (info.offset !== expectedOffset) {
+      problems.push(`offset drift at ${filePath}: expected ${expectedOffset}, header says ${info.offset}`)
+      expectedOffset = info.offset
+    }
+    expectedOffset += info.length
+  }
+  const dataLength = buf.length - dataStart
+  if (dataLength !== expectedOffset) {
+    problems.push(`data length mismatch: header accounts for ${expectedOffset} bytes, bundle has ${dataLength}`)
+  }
+
+  for (const [filePath, info] of sortedEntries) {
+    const content = buf.subarray(dataStart + info.offset, dataStart + info.offset + info.length).toString()
+
+    if (/\.(js|mjs|cjs)$/.test(filePath)) {
+      try {
+        // CJS files execute inside a function wrapper, so this parse matches
+        // the loader; static import/export are syntax errors here.
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        new Function(content)
+      } catch (e) {
+        problems.push(`${filePath} is not valid CJS: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`)
+      }
+      if (/[^.\w]import\s*\(/.test(content)) {
+        problems.push(`${filePath} still contains a dynamic import()`)
+      }
+    } else if (filePath.endsWith('/package.json')) {
+      try {
+        const pkg = JSON.parse(content) as { type?: string }
+        if (pkg.type === 'module') problems.push(`${filePath} still declares "type": "module"`)
+      } catch { /* malformed package.json is the converter's skip case too */ }
+    }
+  }
+
+  if (problems.length > 0) {
+    const shown = problems.slice(0, 20)
+    const more = problems.length - shown.length
+    throw new Error(
+      `Bundle validation failed for ${bundlePath}:\n  - ${shown.join('\n  - ')}` +
+      (more > 0 ? `\n  ...and ${more} more` : '')
+    )
+  }
 }
 
 export interface ConvertOptions {
@@ -170,6 +243,10 @@ export function convertBundleEsmToCjs (bundlePath: string, options: ConvertOptio
   ])
 
   fs.writeFileSync(bundlePath, rewrapBundle(wrapper, newBundle))
+
+  // Re-read and validate the final artifact so a converter regression fails
+  // the build here rather than at load time on a device.
+  validateBundle(bundlePath)
 
   if (!options.verbose) {
     console.log(`  ESM→CJS: converted ${converted} JS files, patched ${pkgPatched} package.json files`)

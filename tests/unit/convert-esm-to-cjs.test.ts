@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { convertBundleEsmToCjs } from '../../src/bundler/convert-esm-to-cjs'
+import { convertBundleEsmToCjs, validateBundle } from '../../src/bundler/convert-esm-to-cjs'
 
 /** Build a bare-pack style bundle: <N>\n<JSON>\n<DATA> */
 function createBundle (files: Record<string, string>): Buffer {
@@ -182,6 +182,69 @@ describe('convertBundleEsmToCjs', () => {
       const files = readWrappedFiles()
       expect(files['/a.js']).toContain('require("x")')
       expect(JSON.parse(files['/b.json'])).toEqual({ nested: { works: true } })
+    })
+  })
+
+  describe('validateBundle', () => {
+    const writeBundle = (files: Record<string, string>, mutate?: (bundle: Buffer) => Buffer): void => {
+      let bundle = createBundle(files)
+      if (mutate) bundle = mutate(bundle)
+      fs.writeFileSync(bundlePath, bundle)
+    }
+
+    it('passes on a converted bundle (and runs automatically after conversion)', () => {
+      writeBundle({
+        '/node_modules/pkg/index.js': "import dep from 'dep'\nexport const x = dep"
+      })
+      // convertBundleEsmToCjs calls validateBundle internally — not throwing IS the assertion
+      expect(() => convertBundleEsmToCjs(bundlePath, { minify: false })).not.toThrow()
+      expect(() => validateBundle(bundlePath)).not.toThrow()
+    })
+
+    it('rejects files that are not valid CJS (unconverted ESM)', () => {
+      writeBundle({ '/a.js': 'export const x = 1' })
+      expect(() => validateBundle(bundlePath)).toThrow(/not valid CJS/)
+    })
+
+    it('rejects surviving dynamic import()', () => {
+      // import(x) is parseable inside a CJS wrapper, so the syntax check
+      // alone would miss it — the token scan must catch it
+      writeBundle({ '/a.js': 'module.exports = () => import("x")' })
+      expect(() => validateBundle(bundlePath)).toThrow(/dynamic import/)
+    })
+
+    it('rejects package.json still declaring "type": "module"', () => {
+      writeBundle({
+        '/node_modules/pkg/package.json': JSON.stringify({ name: 'pkg', type: 'module' }),
+        '/node_modules/pkg/index.js': 'module.exports = 1'
+      })
+      expect(() => validateBundle(bundlePath)).toThrow(/"type": "module"/)
+    })
+
+    it('rejects data length drift (offsets not matching content)', () => {
+      // Simulates the hand-edit failure mode: content bytes change but the
+      // header offsets/lengths are not recomputed
+      writeBundle({ '/a.js': 'module.exports = 1', '/b.js': 'module.exports = 2' },
+        bundle => Buffer.concat([bundle, Buffer.from('EXTRA')]))
+      expect(() => validateBundle(bundlePath)).toThrow(/data length mismatch/)
+    })
+
+    it('rejects a main missing from the file map', () => {
+      const files = { '/a.js': 'module.exports = 1' }
+      const fileMap: Record<string, { offset: number, length: number }> = {}
+      const buf = Buffer.from(files['/a.js'])
+      fileMap['/a.js'] = { offset: 0, length: buf.length }
+      const json = JSON.stringify({ main: '/missing.js', files: fileMap })
+      fs.writeFileSync(bundlePath, Buffer.concat([
+        Buffer.from(`${json.length + 2}\n`), Buffer.from(json), Buffer.from('\n'), buf
+      ]))
+      expect(() => validateBundle(bundlePath)).toThrow(/main '\/missing\.js'/)
+    })
+
+    it('validates wrapped bundles through the wrapper', () => {
+      const wrapped = Buffer.from(`module.exports = ${JSON.stringify(createBundle({ '/a.js': 'export default 1' }).toString('utf8'))}\n`)
+      fs.writeFileSync(bundlePath, wrapped)
+      expect(() => validateBundle(bundlePath)).toThrow(/not valid CJS/)
     })
   })
 })
