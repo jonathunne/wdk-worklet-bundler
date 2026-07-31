@@ -9,6 +9,11 @@
  * Note: .mjs files keep their extension — the worklet patches
  * Module._extensions['.mjs'] at runtime to load them as CJS.
  *
+ * Note: BundleWrapper is used to detect and restore the wrapper that bare-pack adds to
+ * the raw bundle for .bundle.js/.bundle.cjs/.bundle.mjs/.bundle.json. The ESM→CJS
+ * conversion rewrites the bare-pack byte layout, so we must strip any such wrapper
+ * first (otherwise parseBundle sees JS source, not the header) and restore the exact
+ * same wrapper afterwards so the artifact stays importable.
  * Bundle format: <N>\n<JSON>\n<DATA>
  * where N = JSON.length + 2, offsets in header.files are relative to DATA.
  */
@@ -44,6 +49,40 @@ function parseBundle (buf: Buffer): { header: BundleHeader, dataStart: number } 
   return { header, dataStart }
 }
 
+// Type of the wrapper that bare-pack adds to the raw bundle
+type BundleWrapper = 'cjs' | 'mjs' | 'json'
+
+const WRAPPERS: Array<{ kind: BundleWrapper, prefix: string }> = [
+  { kind: 'cjs', prefix: 'module.exports = ' },
+  { kind: 'mjs', prefix: 'export default ' }
+]
+
+function unwrapBundle (raw: Buffer): { wrapper: BundleWrapper | null, bundle: Buffer } {
+  const head = raw.subarray(0, 32).toString('utf8')
+  for (const { kind, prefix } of WRAPPERS) {
+    if (head.startsWith(prefix)) {
+      // Right-hand side is a JSON string literal
+      const bundleStr = JSON.parse(raw.subarray(prefix.length).toString('utf8')) as string
+      return { wrapper: kind, bundle: Buffer.from(bundleStr, 'utf8') }
+    }
+  }
+  // A raw bundle starts with the numeric header length; .bundle.json is the
+  // whole bundle as one JSON string literal, so it starts with a quote.
+  if (head.startsWith('"')) {
+    const bundleStr = JSON.parse(raw.toString('utf8')) as string
+    return { wrapper: 'json', bundle: Buffer.from(bundleStr, 'utf8') }
+  }
+  return { wrapper: null, bundle: raw }
+}
+
+function rewrapBundle (wrapper: BundleWrapper | null, bundle: Buffer): Buffer {
+  if (wrapper === null) return bundle
+  const str = JSON.stringify(bundle.toString('utf8'))
+  if (wrapper === 'json') return Buffer.from(`${str}\n`)
+  const prefix = WRAPPERS.find(w => w.kind === wrapper)!.prefix
+  return Buffer.from(`${prefix}${str}\n`)
+}
+
 export interface ConvertOptions {
   minify?: boolean
   verbose?: boolean
@@ -52,7 +91,7 @@ export interface ConvertOptions {
 export function convertBundleEsmToCjs (bundlePath: string, options: ConvertOptions = {}): void {
   const { minify = true, verbose = false } = options
 
-  const buf = fs.readFileSync(bundlePath)
+  const { wrapper, bundle: buf } = unwrapBundle(fs.readFileSync(bundlePath))
   const { header, dataStart } = parseBundle(buf)
 
   const files = header.files
@@ -130,7 +169,7 @@ export function convertBundleEsmToCjs (bundlePath: string, options: ConvertOptio
     newData
   ])
 
-  fs.writeFileSync(bundlePath, newBundle)
+  fs.writeFileSync(bundlePath, rewrapBundle(wrapper, newBundle))
 
   if (!options.verbose) {
     console.log(`  ESM→CJS: converted ${converted} JS files, patched ${pkgPatched} package.json files`)
