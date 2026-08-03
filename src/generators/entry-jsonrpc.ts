@@ -68,6 +68,7 @@ const context = {
   WDK,
   walletManagers,
   protocolManagers: typeof protocolManagers !== 'undefined' ? protocolManagers : {},
+  allowedMethods: ${JSON.stringify(config.allowedMethods ?? {})},
   wdkLoadError,
   get wdk () { return wdk },
   set wdk (value) { wdk = value }

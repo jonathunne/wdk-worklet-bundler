@@ -9,6 +9,15 @@ export const configSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   type: 'object',
   required: ['networks'],
+  definitions: {
+    protocolAllowedMethods: {
+      type: 'object',
+      properties: {
+        methods: { type: 'array', items: { type: 'string' }, description: 'Methods allowed on this protocol surface' }
+      },
+      additionalProperties: false
+    }
+  },
   properties: {
     networks: {
       type: 'object',
@@ -50,6 +59,30 @@ export const configSchema = {
       type: 'array',
       items: { type: 'string' },
       description: 'Modules to preload (native addons)'
+    },
+    allowedMethods: {
+      type: 'object',
+      additionalProperties: {
+        type: 'object',
+        properties: {
+          methods: { type: 'array', items: { type: 'string' }, description: 'Methods allowed directly on this network\'s account' },
+          protocols: {
+            type: 'object',
+            additionalProperties: {
+              type: 'object',
+              additionalProperties: { $ref: '#/definitions/protocolAllowedMethods' }
+            },
+            description: 'protocolType -> protocolName -> allowed methods for that protocol surface'
+          }
+        },
+        additionalProperties: false
+      },
+      description: 'Map of network name to the methods (and nested protocol surfaces) it allows'
+    },
+    allowedModuleMethods: {
+      type: 'object',
+      additionalProperties: { $ref: '#/definitions/protocolAllowedMethods' },
+      description: 'Map of module name to the methods it allows (for callModule)'
     },
     transport: {
       type: 'string',

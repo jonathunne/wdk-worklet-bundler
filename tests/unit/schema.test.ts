@@ -98,5 +98,52 @@ describe('Config Schema Validation', () => {
       }
       expect(() => validateConfig(config)).toThrow('must have required property \'package\'')
     })
+
+    it('should validate a config with allowedMethods', () => {
+      const config = {
+        networks: { ethereum: { package: 'pkg' } },
+        allowedMethods: {
+          ethereum: {
+            methods: ['getAddress', 'getBalance'],
+            protocols: { swap: { uniswap: { methods: ['quoteSwap'] } } }
+          }
+        }
+      }
+      expect(() => validateConfig(config)).not.toThrow()
+    })
+
+    it('should fail if a network methods entry is not a string array', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        allowedMethods: { eth: { methods: 'getAddress' } }
+      }
+      expect(() => validateConfig(config)).toThrow('must be array')
+    })
+
+    it('should fail if allowedMethods is a flat surface -> array map (old shape)', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        allowedMethods: { eth: ['getAddress'] }
+      }
+      expect(() => validateConfig(config)).toThrow('must be object')
+    })
+
+    it('should validate a config with allowedModuleMethods', () => {
+      const config = {
+        networks: { ethereum: { package: 'pkg' } },
+        allowedModuleMethods: {
+          addressBook: { methods: ['list', 'add'] }
+        }
+      }
+      expect(() => validateConfig(config)).not.toThrow()
+    })
+
+    it('should fail if an allowedModuleMethods entry methods is not a string array', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        allowedModuleMethods: { addressBook: { methods: 'list' } }
+      }
+      expect(() => validateConfig(config)).toThrow('must be array')
+    })
   })
 })

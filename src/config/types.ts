@@ -2,6 +2,26 @@
  * Configuration types for wdk-worklet-bundler
  */
 
+export interface ProtocolAllowedMethods {
+  /** Methods allowed on this protocol surface. Omit to leave unrestricted. */
+  methods?: string[]
+}
+
+/** protocolName -> allowed methods, for one protocol type (e.g. all 'swap' protocols). */
+export interface ProtocolNameAllowedMethods {
+  [protocolName: string]: ProtocolAllowedMethods
+}
+
+/** protocolType -> ProtocolNameAllowedMethods (e.g. 'swap', 'bridge', 'lending', 'fiat'). */
+export interface ProtocolTypeAllowedMethods {
+  [protocolType: string]: ProtocolNameAllowedMethods
+}
+
+export interface NetworkAllowedMethods extends ProtocolAllowedMethods {
+  /** Omit a level (protocols, a protocolType, or a protocolName) to leave it unrestricted. */
+  protocols?: ProtocolTypeAllowedMethods
+}
+
 export interface WdkBundleConfig {
   /** Module definitions: key -> package path */
   networks: {
@@ -36,6 +56,31 @@ export interface WdkBundleConfig {
 
   /** Modules to preload (native addons like spark-frost-bare-addon) */
   preloadModules?: string[]
+
+  /**
+   * Optional but recommended: without this, callMethod can invoke any method
+   * on the resolved account/protocol object, including fund-moving or
+   * key-export operations. Shaped like WDK's own protocol storage:
+   * https://github.com/tetherto/wdk. Only restricts the surfaces you list —
+   * any level left out (a network, `protocols`, a protocolType, a
+   * protocolName, or `methods` itself) stays fully unrestricted, so this is
+   * opt-in one surface at a time.
+   */
+  allowedMethods?: {
+    [network: string]: NetworkAllowedMethods
+  }
+
+  /**
+   * Optional but recommended: without this, callModule can invoke any method
+   * on a bundled module instance. Keyed by module name — modules aren't
+   * scoped to a blockchain or protocol, so each entry is just
+   * `{ methods: [...] }`. A module left out of this map (or the map being
+   * unset entirely) stays unrestricted. Only applies to the 'hrpc' transport,
+   * since bundled modules aren't wired up for 'jsonrpc'.
+   */
+  allowedModuleMethods?: {
+    [moduleName: string]: ProtocolAllowedMethods
+  }
 
   /** Transport mechanism for worklet communication */
   transport?: 'hrpc' | 'jsonrpc'
