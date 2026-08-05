@@ -14,7 +14,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { execFileSync } from 'child_process'
-import { convertBundleEsmToCjs } from '../../src/bundler/convert-esm-to-cjs'
+import { convertBundleEsmToCjs } from '../../src/bundler/bare-bundle-esm-to-cjs'
 
 const BARE_PACK = path.join(__dirname, '../../node_modules/.bin/bare-pack')
 
