@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { convertBundleEsmToCjs, validateBundle } from '../../src/bundler/bare-bundle-esm-to-cjs'
+import { convertBundleEsmToCjs, validateBundle } from '../../src/bundler/convert-esm-to-cjs'
 
 /** Build a bare-pack style bundle: <N>\n<JSON>\n<DATA> */
 function createBundle (files: Record<string, string>): Buffer {
