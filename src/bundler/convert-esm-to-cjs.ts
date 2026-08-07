@@ -7,15 +7,53 @@
  * lowered to a require shim) on every .js/.mjs/.cjs file and removes
  * "type": "module" from package.json files.
  *
- * Note: .mjs files keep their extension — the generated worklet entry patches
- * Module._extensions['.mjs'] at runtime to load them as CJS (see
- * generators/mjs-as-cjs-patch.ts).
- *
  * The bundle byte format (`<N>\n<JSON>\n<DATA>`) is owned by bare-bundle's
  * Bundle class (the same code Bare uses to load bundles on device) — this
  * module only unwraps the optional bare-pack output wrapper, rewrites file
  * contents through Bundle.from()/write()/toBuffer(), and restores the
  * wrapper. No manual header/offset arithmetic.
+ *
+ * Example — suppose bare-pack generated this bundle (one ESM file):
+ *
+ *     71
+ *     {"main":"/index.mjs","files":{"/index.mjs":{"offset":0,"length":31}}}
+ *     export const answer = () => 42
+ *
+ * That is the raw `.bundle` format `<N>\n<header JSON>\n<file data>`: N is
+ * the byte length of the newline-delimited header region (`\n{…}\n` — here
+ * 69 bytes of JSON + 2 newlines = 71), the header describes the data so
+ * BareKit can load and resolve the files on any device, and the data is the
+ * actual module source (real headers also carry version/id/resolutions —
+ * trimmed here). The other output formats just wrap these same bytes in a
+ * JSON string literal: `module.exports = "71\n…"` (.bundle.js/.cjs),
+ * `export default "71\n…"` (.bundle.mjs), or the bare string `"71\n…"`
+ * (.bundle.json) — any of them works here thanks to stage 1 (which sniffs
+ * the content prefix, not the filename). The pipeline:
+ *
+ * 1. unwrapBundle — strip whichever wrapper is present and JSON.parse the
+ *    string literal back to the raw bundle bytes (a no-op for a raw
+ *    `.bundle` like the example above).
+ *
+ * 2. Bundle.from + esbuild transformSync(format: 'cjs') on each JS file —
+ *    import becomes require, export becomes module.exports (helpers elided):
+ *
+ *        export const answer = () => 42
+ *      → __export(stdin_exports, { answer: () => answer });
+ *        module.exports = __toCommonJS(stdin_exports);
+ *        const answer = () => 42;
+ *
+ *    package.json files lose "type": "module" in the same pass.
+ *
+ * 3. bundle.toBuffer() — bare-bundle recomputes N, offsets and lengths for
+ *    the new contents; this module never does that arithmetic.
+ *
+ * 4. rewrapBundle — restore the wrapper stripped in stage 1 (again a no-op
+ *    for a raw bundle), then validateBundle re-reads the artifact as the
+ *    build-time guard.
+ *
+ * 5. (outside this file) the converted files keep their .mjs keys — the
+ *    generated worklet entry patches Module._extensions['.mjs'] at runtime
+ *    so the now-CJS source loads as CJS (see generators/mjs-as-cjs-patch.ts).
  */
 
 import fs from 'fs'
