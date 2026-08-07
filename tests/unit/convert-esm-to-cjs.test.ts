@@ -221,12 +221,42 @@ describe('convertBundleEsmToCjs', () => {
       expect(() => validateBundle(bundlePath)).toThrow(/"type": "module"/)
     })
 
-    it('rejects data length drift (offsets not matching content)', () => {
-      // Simulates the hand-edit failure mode: content bytes change but the
-      // header offsets/lengths are not recomputed
+    it('rejects data length mismatch (bytes the header does not account for)', () => {
+      // Covers the total-length half of the structural check: content bytes
+      // changed but the header lengths were not recomputed
       writeBundle({ '/a.js': 'module.exports = 1', '/b.js': 'module.exports = 2' },
         bundle => Buffer.concat([bundle, Buffer.from('EXTRA')]))
       expect(() => validateBundle(bundlePath)).toThrow(/data length mismatch/)
+    })
+
+    it('rejects stale offsets even when the total data length still matches', () => {
+      // Covers the offset half: Bundle.from ignores offsets (it reads files
+      // sequentially by length), so a stale offset table loads "fine" through
+      // bare-bundle — the validator's independent cumulative-sum check is the
+      // only thing that catches it. Total data length is kept consistent so
+      // only the offset branch can fire.
+      const bufs = ['module.exports = 1', 'module.exports = 2', 'module.exports = 3']
+        .map(content => Buffer.from(content))
+      const fileMap = {
+        '/a.js': { offset: 0, length: bufs[0].length },
+        // Stale: /b.js content once had a different length and this offset
+        // was never recomputed
+        '/b.js': { offset: bufs[0].length + 4, length: bufs[1].length },
+        '/c.js': { offset: bufs[0].length + bufs[1].length, length: bufs[2].length }
+      }
+      const json = JSON.stringify({ files: fileMap })
+      fs.writeFileSync(bundlePath, Buffer.concat([
+        Buffer.from(`${json.length + 2}\n`), Buffer.from(json), Buffer.from('\n'), ...bufs
+      ]))
+
+      let error: Error | undefined
+      try {
+        validateBundle(bundlePath)
+      } catch (e) {
+        error = e as Error
+      }
+      expect(error?.message).toMatch(/offset drift at \/b\.js/)
+      expect(error?.message).not.toMatch(/data length mismatch/)
     })
 
     it('rejects a main missing from the file map', () => {
