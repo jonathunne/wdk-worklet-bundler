@@ -15,6 +15,7 @@ export type { ModuleInfo, ValidationResult, InstallResult, UninstallResult } fro
 // Bundler
 export { generateBundle, generateSourceFiles, linkAddons } from './bundler'
 export type { GenerateBundleOptions, GenerateBundleResult, LinkAddonsOptions, LinkAddonsResult } from './bundler'
+export { convertBundleEsmToCjs, validateBundle } from './bundler/convert-esm-to-cjs' // Added here for a potential cli so we can check arifacts for the cli here and maybe to wdk-cli validate-bundle etc...
 
 // Generators
 export { generateEntryPoint } from './generators/entry'

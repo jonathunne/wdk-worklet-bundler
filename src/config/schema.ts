@@ -122,7 +122,7 @@ export const configSchema = {
           description: 'Platforms to generate addons for'
         },
         swiftTarget: { type: 'string', description: 'Xcode target name used in addons.yml' },
-        convertEsmToCjs: { type: 'boolean', description: 'Convert ESM to CJS in bundle (for JSC runtimes). Defaults to true for jsonrpc transport.' }
+        convertEsmToCjs: { type: 'boolean', description: 'Convert ESM to CJS in bundle (for engines without ESM support in Bare, e.g. JSC, QuickJS). Defaults to false.' }
       }
     }
   }

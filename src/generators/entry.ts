@@ -5,6 +5,7 @@ import { generateWalletModulesCode } from './wallet-modules'
 import { generateProtocolModulesCode } from './protocol-modules'
 import { generateModuleModulesCode } from './module-modules'
 import { DEFAULT_ENTRY_FILENAME } from '../constants'
+import { generateMjsAsCjsPatch } from './mjs-as-cjs-patch'
 
 export async function generateEntryPoint (config: ResolvedConfig, outputDir: string): Promise<string> {
   const walletModulesCode = generateWalletModulesCode(config)
@@ -17,6 +18,7 @@ export async function generateEntryPoint (config: ResolvedConfig, outputDir: str
 // DO NOT EDIT MANUALLY
 
 require('bare-node-runtime/global');
+${generateMjsAsCjsPatch(config)}
 const { globalAgent: http1Agent } = require('bare-http1')
 const { globalAgent: httpsAgent } = require('bare-https')
 

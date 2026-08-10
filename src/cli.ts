@@ -25,7 +25,6 @@ interface GenerateOptions {
   linkAddons?: boolean
   skipLinkAddons?: boolean
   platforms?: string
-  esmToCjs?: boolean
   deferOptionalPeers?: boolean
 }
 
@@ -64,7 +63,6 @@ program
   .option('--link-addons', 'Link native addons via bare-link (default: true for jsonrpc)')
   .option('--skip-link-addons', 'Skip bare-link addon linking (overrides jsonrpc default)')
   .option('--platforms <platforms>', 'Comma-separated platforms for addons: ios,macos,android')
-  .option('--no-esm-to-cjs', 'Skip ESM to CJS conversion (for V8 runtimes like Android)')
   .option('--no-defer-optional-peers', 'Fail on missing optional peer deps (e.g. Ledger support) instead of deferring them to runtime')
   .action(async (options: GenerateOptions) => {
     const { loadConfig } = await import('./config/loader')
@@ -123,7 +121,7 @@ program
       }
 
       // Apply CLI addon and build overrides
-      if (options.linkAddons || options.skipLinkAddons || options.platforms || options.esmToCjs === false) {
+      if (options.linkAddons || options.skipLinkAddons || options.platforms) {
         const parsedPlatforms = options.platforms
           ? options.platforms.split(',')
               .map((p: string) => p.trim())
@@ -135,8 +133,7 @@ program
             ...config.options,
             ...(options.linkAddons ? { linkAddons: true } : {}),
             ...(options.skipLinkAddons ? { linkAddons: false } : {}),
-            ...(parsedPlatforms ? { platforms: parsedPlatforms } : {}),
-            ...(options.esmToCjs === false ? { convertEsmToCjs: false } : {})
+            ...(parsedPlatforms ? { platforms: parsedPlatforms } : {})
           }
         }
       }
