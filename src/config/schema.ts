@@ -122,7 +122,14 @@ export const configSchema = {
           description: 'Platforms to generate addons for'
         },
         swiftTarget: { type: 'string', description: 'Xcode target name used in addons.yml' },
-        convertEsmToCjs: { type: 'boolean', description: 'Convert ESM to CJS in bundle (for engines without ESM support in Bare, e.g. JSC, QuickJS). Defaults to false.' }
+        convertEsmToCjs: { type: 'boolean', description: 'Convert ESM to CJS in bundle (for engines without ESM support in Bare, e.g. JSC, QuickJS). Defaults to false.' },
+        handleLeakCheck: {
+          oneOf: [
+            { const: true },
+            { type: 'number', exclusiveMinimum: 0 }
+          ],
+          description: "Enable pear-wrk-wdk's handle-leak diagnostic. Set to `true` for its default tick interval, or a positive number of ms to override it. Omit to disable entirely."
+        }
       }
     }
   }
