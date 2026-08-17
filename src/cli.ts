@@ -9,7 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import { DEFAULT_BUNDLE_BUILD_HOSTS, DEFAULT_BUNDLE_PATH, DEFAULT_TYPES_PATH, DEFAULT_OUTPUT_DIR } from './constants'
 import { printBanner } from './utils/banner'
-import { getPackageList, installablePackageRoot } from './config/packages'
+import { getPackageList } from './config/packages'
 import pkg from '../package.json'
 
 interface GenerateOptions {
@@ -71,6 +71,7 @@ program
       installDependencies,
       findMissingRequiredPeers,
       detectPackageManager,
+      installablePackageRoot,
       generateInstallCommand
     } = await import('./validators/dependencies')
     const { generateBundle, generateSourceFiles } = await import('./bundler')
@@ -274,9 +275,13 @@ program
           console.log(`\n❌ Build failed: Missing dependency '${result.missingModule}'\n`)
           const installable = installablePackageRoot(result.missingModule)
           if (installable != null) {
+            const installCommand = generateInstallCommand(
+              [installable],
+              detectPackageManager(config.projectRoot)
+            )
             console.log('💡 This appears to be a required dependency that was not detected automatically.')
             console.log('   Please install it manually and try again:\n')
-            console.log(`   npm install ${installable}\n`)
+            console.log(`   ${installCommand}\n`)
           }
           process.exit(1)
         }
