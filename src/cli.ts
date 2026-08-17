@@ -9,7 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import { DEFAULT_BUNDLE_BUILD_HOSTS, DEFAULT_BUNDLE_PATH, DEFAULT_TYPES_PATH, DEFAULT_OUTPUT_DIR } from './constants'
 import { printBanner } from './utils/banner'
-import { getPackageList } from './config/packages'
+import { getPackageList, installablePackageRoot } from './config/packages'
 import pkg from '../package.json'
 
 interface GenerateOptions {
@@ -272,9 +272,12 @@ program
       if (!result.success) {
         if (result.missingModule) {
           console.log(`\n❌ Build failed: Missing dependency '${result.missingModule}'\n`)
-          console.log('💡 This appears to be a required dependency that was not detected automatically.')
-          console.log('   Please install it manually and try again:\n')
-          console.log(`   npm install ${result.missingModule}\n`)
+          const installable = installablePackageRoot(result.missingModule)
+          if (installable != null) {
+            console.log('💡 This appears to be a required dependency that was not detected automatically.')
+            console.log('   Please install it manually and try again:\n')
+            console.log(`   npm install ${installable}\n`)
+          }
           process.exit(1)
         }
 
