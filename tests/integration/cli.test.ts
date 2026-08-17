@@ -91,6 +91,7 @@ module.exports = {
       mockPackage('@tetherto/wdk-wallet-evm-erc-4337')
       mockPackage('@tetherto/wdk')
       mockPackage('bare-node-runtime')
+      mockPackage('@tetherto/pear-wrk-wdk')
 
       const output = runCli('validate')
 
@@ -210,6 +211,7 @@ module.exports = {
       mockPackage('@tetherto/wdk-wallet-evm-erc-4337')
       mockPackage('@tetherto/wdk')
       mockPackage('bare-node-runtime')
+      mockPackage('@tetherto/pear-wrk-wdk')
 
       const output = runCli('generate --dry-run')
 
