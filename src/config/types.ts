@@ -75,8 +75,7 @@ export interface WdkBundleConfig {
    * on a bundled module instance. Keyed by module name — modules aren't
    * scoped to a blockchain or protocol, so each entry is just
    * `{ methods: [...] }`. A module left out of this map (or the map being
-   * unset entirely) stays unrestricted. Only applies to the 'hrpc' transport,
-   * since bundled modules aren't wired up for 'jsonrpc'.
+   * unset entirely) stays unrestricted.
    */
   allowedModuleMethods?: {
     [moduleName: string]: ProtocolAllowedMethods

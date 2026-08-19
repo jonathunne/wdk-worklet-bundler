@@ -249,9 +249,7 @@ module.exports = {
   // ── Allowed module methods ────────────────────────────────
   // Optional but recommended: without this, callModule can invoke any
   // method on a bundled module instance (e.g. an address book). Keyed
-  // by module name; a module left out stays unrestricted. Only applies
-  // to the 'hrpc' transport — bundled modules aren't wired up for
-  // 'jsonrpc'.
+  // by module name; a module left out stays unrestricted.
   allowedModuleMethods: {
     addressBook: { methods: ["list", "add"] },
   },
