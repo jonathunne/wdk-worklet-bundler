@@ -71,6 +71,7 @@ program
       installDependencies,
       findMissingRequiredPeers,
       detectPackageManager,
+      installablePackageRoot,
       generateInstallCommand
     } = await import('./validators/dependencies')
     const { generateBundle, generateSourceFiles } = await import('./bundler')
@@ -272,9 +273,16 @@ program
       if (!result.success) {
         if (result.missingModule) {
           console.log(`\n❌ Build failed: Missing dependency '${result.missingModule}'\n`)
-          console.log('💡 This appears to be a required dependency that was not detected automatically.')
-          console.log('   Please install it manually and try again:\n')
-          console.log(`   npm install ${result.missingModule}\n`)
+          const installable = installablePackageRoot(result.missingModule)
+          if (installable != null) {
+            const installCommand = generateInstallCommand(
+              [installable],
+              detectPackageManager(config.projectRoot)
+            )
+            console.log('💡 This appears to be a required dependency that was not detected automatically.')
+            console.log('   Please install it manually and try again:\n')
+            console.log(`   ${installCommand}\n`)
+          }
           process.exit(1)
         }
 

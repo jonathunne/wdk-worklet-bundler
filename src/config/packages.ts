@@ -11,6 +11,9 @@ export function getPackageList (config: WdkBundleConfig): string[] {
   // For validation, we should probably check it.
   packages.add('@tetherto/wdk')
   packages.add('bare-node-runtime')
+  // Both transport entries require the Pear Worklet runtime unconditionally
+  // (hrpc → @tetherto/pear-wrk-wdk/worklet, jsonrpc → @tetherto/pear-wrk-wdk/jsonrpc)
+  packages.add('@tetherto/pear-wrk-wdk')
 
   if (config.networks) {
     for (const net of Object.values(config.networks)) {

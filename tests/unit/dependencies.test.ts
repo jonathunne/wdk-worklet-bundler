@@ -5,6 +5,7 @@ import {
   resolveModule,
   validateDependencies,
   detectPackageManager,
+  installablePackageRoot,
   generateInstallCommand,
   generateUninstallCommand,
   installDependencies,
@@ -526,6 +527,38 @@ describe('Dependency Validator', () => {
       fs.writeFileSync(path.join(tempDir, 'pnpm-lock.yaml'), '')
       fs.writeFileSync(path.join(tempDir, 'yarn.lock'), '')
       expect(detectPackageManager(tempDir)).toBe('pnpm')
+    })
+  })
+
+  describe('installablePackageRoot', () => {
+    it('strips subpaths from scoped specifiers', () => {
+      expect(installablePackageRoot('@tetherto/pear-wrk-wdk/worklet')).toBe('@tetherto/pear-wrk-wdk')
+      expect(installablePackageRoot('@tetherto/pear-wrk-wdk/jsonrpc')).toBe('@tetherto/pear-wrk-wdk')
+    })
+
+    it('strips subpaths from unscoped specifiers', () => {
+      expect(installablePackageRoot('ws/lib/websocket')).toBe('ws')
+    })
+
+    it('returns plain package names unchanged', () => {
+      expect(installablePackageRoot('bare-node-runtime')).toBe('bare-node-runtime')
+      expect(installablePackageRoot('@tetherto/wdk')).toBe('@tetherto/wdk')
+    })
+
+    it('returns null for relative and absolute specifiers (nothing installable)', () => {
+      expect(installablePackageRoot('./generated/entry.js')).toBeNull()
+      expect(installablePackageRoot('../outside.js')).toBeNull()
+      expect(installablePackageRoot('/abs/path.js')).toBeNull()
+    })
+
+    it('returns null for private imports-field mappings and URL-like specifiers', () => {
+      expect(installablePackageRoot('#internal/db')).toBeNull()
+      expect(installablePackageRoot('node:fs')).toBeNull()
+      expect(installablePackageRoot('file:///abs/path.js')).toBeNull()
+    })
+
+    it('returns null for a bare scope (npm cannot install a whole scope)', () => {
+      expect(installablePackageRoot('@tetherto')).toBeNull()
     })
   })
 

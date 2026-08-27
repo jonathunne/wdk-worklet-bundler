@@ -376,6 +376,24 @@ export function detectPackageManager (
   return 'npm'
 }
 
+/**
+ * Reduce a require specifier to the npm package that provides it: subpaths
+ * are package exports, not installable names (`@tetherto/pear-wrk-wdk/worklet`
+ * → `@tetherto/pear-wrk-wdk`). Returns null when nothing is installable:
+ * relative/absolute paths, private `imports`-field mappings (`#…`), URL-like
+ * or builtin-prefixed specifiers (`node:fs`, `file://…`), and bare scopes
+ * (`@org` — npm cannot install a whole scope).
+ */
+export function installablePackageRoot (specifier: string): string | null {
+  if (specifier.startsWith('.') || specifier.startsWith('/') ||
+      specifier.startsWith('#') || specifier.includes(':')) return null
+  const segments = specifier.split('/')
+  if (specifier.startsWith('@')) {
+    return segments.length >= 2 ? segments.slice(0, 2).join('/') : null
+  }
+  return segments[0]
+}
+
 export function generateInstallCommand (
   missing: string[],
   packageManager: 'npm' | 'yarn' | 'pnpm' = 'npm'
