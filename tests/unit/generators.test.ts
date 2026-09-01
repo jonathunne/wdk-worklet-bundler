@@ -4,6 +4,7 @@ import os from 'os'
 import { generateWalletModulesCode } from '../../src/generators/wallet-modules'
 import { generateModuleModulesCode } from '../../src/generators/module-modules'
 import { generateEntryPoint } from '../../src/generators/entry'
+import { generateJsonRpcEntryPoint } from '../../src/generators/entry-jsonrpc'
 import type { ResolvedConfig } from '../../src/config/types'
 
 describe('Code Generators', () => {
@@ -347,6 +348,55 @@ describe('Code Generators', () => {
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('options.handleLeakCheck is set'))
         warnSpy.mockRestore()
       })
+    })
+  })
+
+  describe('generateJsonRpcEntryPoint', () => {
+    let tempDir: string
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wdk-jsonrpc-entry-test-'))
+    })
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    })
+
+    it('wires modules and their allowlist into the JSON-RPC context', async () => {
+      const config = createMockConfig({
+        transport: 'jsonrpc',
+        modules: {
+          addressBook: {
+            package: '@tetherto/wdk-p2p-address-book',
+            factory: 'createWorkletModule',
+            events: ['update']
+          }
+        },
+        allowedModuleMethods: {
+          addressBook: { methods: ['list', 'add'] }
+        }
+      })
+
+      const entryPath = await generateJsonRpcEntryPoint(config, tempDir)
+      const content = fs.readFileSync(entryPath, 'utf-8')
+
+      expect(content).toContain('// Transport: jsonrpc')
+      expect(content).toContain("require('@tetherto/wdk-p2p-address-book'")
+      expect(content).toContain("moduleManagers['addressBook'] = {")
+      expect(content).toContain('moduleManagers: typeof moduleManagers !== \'undefined\' ? moduleManagers : {}')
+      expect(content).toContain('allowedModuleMethods: {"addressBook":{"methods":["list","add"]}}')
+      expect(content).toContain('registerJsonRpcHandlers(BareIPC, context)')
+      expect(content).toContain('context.moduleRuntime.suspendAll()')
+      expect(content).toContain('context.moduleRuntime.resumeAll()')
+    })
+
+    it('defaults modules and their allowlist to empty maps', async () => {
+      const entryPath = await generateJsonRpcEntryPoint(createMockConfig({ transport: 'jsonrpc' }), tempDir)
+      const content = fs.readFileSync(entryPath, 'utf-8')
+
+      expect(content).toContain('// No modules configured')
+      expect(content).toContain("moduleManagers: typeof moduleManagers !== 'undefined' ? moduleManagers : {}")
+      expect(content).toContain('allowedModuleMethods: {}')
     })
   })
 })

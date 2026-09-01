@@ -4,6 +4,7 @@ import path from 'path'
 import os from 'os'
 
 const CLI_PATH = path.resolve(__dirname, '../../dist/cli.js')
+const BARE_PACK_MODULE = path.resolve(__dirname, '../../node_modules/bare-pack')
 
 describe('CLI Integration Tests', () => {
   let tempDir: string
@@ -39,6 +40,16 @@ describe('CLI Integration Tests', () => {
       path.join(pkgPath, 'package.json'),
       JSON.stringify({ name, version: '1.0.0' })
     )
+  }
+
+  const mockPackageFiles = (name: string, files: Record<string, string>): void => {
+    mockPackage(name)
+    const pkgPath = path.join(tempDir, 'node_modules', name)
+    for (const [filename, source] of Object.entries(files)) {
+      const filepath = path.join(pkgPath, filename)
+      fs.mkdirSync(path.dirname(filepath), { recursive: true })
+      fs.writeFileSync(filepath, source)
+    }
   }
 
   describe('init command', () => {
@@ -138,6 +149,65 @@ module.exports = {
     it('should fail when config is missing', () => {
       const output = runCli('generate')
       expect(output).toContain('No wdk.config.js found')
+    })
+
+    it('should produce a jsonrpc bundle containing configured modules', () => {
+      const config = `
+module.exports = {
+  transport: 'jsonrpc',
+  networks: { ethereum: { package: '@tetherto/wdk-wallet-evm' } },
+  modules: {
+    addressBook: {
+      package: '@tetherto/wdk-p2p-address-book',
+      factory: 'createWorkletModule',
+      events: ['update'],
+    },
+  },
+  allowedModuleMethods: { addressBook: { methods: ['list'] } },
+  output: { bundle: './out/wdk.bundle' },
+};
+`
+      fs.writeFileSync(path.join(tempDir, 'wdk.config.js'), config)
+
+      mockPackageFiles('@tetherto/wdk', {
+        'index.js': 'module.exports = class WDK {}\n'
+      })
+      mockPackageFiles('bare-node-runtime', {
+        'global.js': 'module.exports = {}\n',
+        'imports.json': '{}\n'
+      })
+      mockPackageFiles('@tetherto/wdk-wallet-evm', {
+        'index.js': 'module.exports = class WalletManager {}\n'
+      })
+      mockPackageFiles('@tetherto/wdk-p2p-address-book', {
+        'index.js': 'exports.createWorkletModule = (ctx) => ({ ctx, list: () => [] })\n'
+      })
+      mockPackageFiles('@tetherto/pear-wrk-wdk', {
+        'jsonrpc.js': `
+exports.registerJsonRpcHandlers = () => {};
+exports.utils = { logger: { info: () => {}, error: () => {} } };
+`
+      })
+
+      // generateBundle runs `npx --no-install bare-pack` from the fixture
+      // project, so expose this repo's already-installed test dependency there.
+      fs.symlinkSync(BARE_PACK_MODULE, path.join(tempDir, 'node_modules', 'bare-pack'), 'dir')
+      const binDir = path.join(tempDir, 'node_modules', '.bin')
+      fs.mkdirSync(binDir, { recursive: true })
+      fs.symlinkSync('../bare-pack/bin.js', path.join(binDir, 'bare-pack'))
+
+      const output = runCli('generate --skip-link-addons --keep-artifacts --no-types')
+      const entry = fs.readFileSync(path.join(tempDir, '.wdk', 'wdk-worklet.generated.js'), 'utf-8')
+      const bundlePath = path.join(tempDir, 'out', 'wdk.bundle')
+
+      expect(output).toContain('Bundle generated successfully')
+      expect(entry).toContain("require('@tetherto/wdk-p2p-address-book'")
+      expect(entry).toContain("moduleManagers['addressBook'] = {")
+      expect(entry).toContain('moduleManagers: typeof moduleManagers')
+      expect(entry).toContain('allowedModuleMethods: {"addressBook":{"methods":["list"]}}')
+      expect(fs.existsSync(bundlePath)).toBe(true)
+      expect(fs.statSync(bundlePath).size).toBeGreaterThan(0)
+      expect(fs.readFileSync(bundlePath).includes(Buffer.from('addressBook'))).toBe(true)
     })
 
     it('should fail when dependencies are missing', () => {
