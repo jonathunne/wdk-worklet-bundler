@@ -298,5 +298,55 @@ describe('Code Generators', () => {
       expect(fs.existsSync(nestedDir)).toBe(true)
       expect(fs.existsSync(entryPath)).toBe(true)
     })
+
+    describe('options.handleLeakCheck', () => {
+      it('should emit no trace of the handle-leak diagnostic when unset', async () => {
+        const config = createMockConfig()
+        const entryPath = await generateEntryPoint(config, tempDir)
+        const content = fs.readFileSync(entryPath, 'utf-8')
+
+        expect(content).not.toContain('registerHandleLeakCheck')
+        expect(content).not.toContain('diagnostics/handle-leak-check')
+        expect(content).toContain("const { HRPC, registerRpcHandlers, utils } = require('@tetherto/pear-wrk-wdk/worklet'")
+      })
+
+      it('should include the require and registerHandleLeakCheck() call when enabled and resolvable', async () => {
+        const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wdk-entry-handle-leak-proj-'))
+        const pkgDir = path.join(projectRoot, 'node_modules/@tetherto/pear-wrk-wdk')
+        fs.mkdirSync(path.join(pkgDir, 'diagnostics'), { recursive: true })
+        fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({
+          name: '@tetherto/pear-wrk-wdk',
+          version: '9.9.9',
+          exports: { './diagnostics/handle-leak-check': './diagnostics/handle-leak-check.js' }
+        }))
+        fs.writeFileSync(
+          path.join(pkgDir, 'diagnostics/handle-leak-check.js'),
+          'module.exports = { registerHandleLeakCheck () {} }'
+        )
+
+        try {
+          const config = createMockConfig({ projectRoot, options: { handleLeakCheck: 5000 } })
+          const entryPath = await generateEntryPoint(config, tempDir)
+          const content = fs.readFileSync(entryPath, 'utf-8')
+
+          expect(content).toContain("const { registerHandleLeakCheck } = require('@tetherto/pear-wrk-wdk/diagnostics/handle-leak-check');")
+          expect(content).toContain('registerHandleLeakCheck({ tickIntervalMs: 5000 });')
+        } finally {
+          fs.rmSync(projectRoot, { recursive: true, force: true })
+        }
+      })
+
+      it('should warn and omit the diagnostic when enabled but unresolvable, without failing generation', async () => {
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        const config = createMockConfig({ options: { handleLeakCheck: true } })
+
+        const entryPath = await generateEntryPoint(config, tempDir)
+        const content = fs.readFileSync(entryPath, 'utf-8')
+
+        expect(content).not.toContain('registerHandleLeakCheck')
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('options.handleLeakCheck is set'))
+        warnSpy.mockRestore()
+      })
+    })
   })
 })

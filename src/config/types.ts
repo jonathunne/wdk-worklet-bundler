@@ -116,6 +116,14 @@ export interface WdkBundleConfig {
      *  Also controls the runtime .mjs-as-CJS loader patch in the generated entry.
      * Defaults to false. */
     convertEsmToCjs?: boolean
+    /** Enables pear-wrk-wdk's handle-leak diagnostic (registerHandleLeakCheck),
+     *  which repeatedly walks and logs active handles while the worklet is
+     *  suspended, to help identify what's keeping the event loop from
+     *  reaching idle promptly. Diagnostic only - omit to disable entirely
+     *  (no require is emitted into the bundle). Set to `true` to enable with
+     *  pear-wrk-wdk's own default tick interval, or a number (ms) to
+     *  override how often it logs while suspended. */
+    handleLeakCheck?: number | true
   }
 }
 

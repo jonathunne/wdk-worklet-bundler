@@ -145,5 +145,61 @@ describe('Config Schema Validation', () => {
       }
       expect(() => validateConfig(config)).toThrow('must be array')
     })
+
+    it('should validate options.handleLeakCheck set to true', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: true }
+      }
+      expect(() => validateConfig(config)).not.toThrow()
+    })
+
+    it('should validate options.handleLeakCheck set to a positive number', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: 5000 }
+      }
+      expect(() => validateConfig(config)).not.toThrow()
+    })
+
+    it('should fail if options.handleLeakCheck is false', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: false }
+      }
+      expect(() => validateConfig(config)).toThrow('Invalid configuration')
+    })
+
+    it('should fail if options.handleLeakCheck is a string', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: '5000' }
+      }
+      expect(() => validateConfig(config)).toThrow('Invalid configuration')
+    })
+
+    it('should fail if options.handleLeakCheck is zero', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: 0 }
+      }
+      expect(() => validateConfig(config)).toThrow('Invalid configuration')
+    })
+
+    it('should fail if options.handleLeakCheck is negative', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: -1000 }
+      }
+      expect(() => validateConfig(config)).toThrow('Invalid configuration')
+    })
+
+    it('should fail if options.handleLeakCheck is NaN', () => {
+      const config = {
+        networks: { eth: { package: 'pkg' } },
+        options: { handleLeakCheck: NaN }
+      }
+      expect(() => validateConfig(config)).toThrow('Invalid configuration')
+    })
   })
 })
